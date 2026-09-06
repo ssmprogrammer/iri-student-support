@@ -523,7 +523,13 @@ DATA_FILE = "app_data.json"
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+
+        for ev in data.get("calendar_events", []):
+            ev["date"] = datetime.date.fromisoformat(ev["date"])
+            ev["time"] = datetime.time.fromisoformat(ev["time"])
+
+        return data
 
     return {
         "club_notices": {},
@@ -531,8 +537,21 @@ def load_data():
     }
 
 def save_data(data):
+    save_data_copy = {
+        "club_notices": data["club_notices"],
+        "calendar_events": [
+            {
+                "date": ev["date"].isoformat(),
+                "time": ev["time"].strftime("%H:%M"),
+                "title": ev["title"],
+                "memo": ev["memo"]
+            }
+            for ev in data["calendar_events"]
+        ]
+    }
+
     with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(save_data_copy, f, ensure_ascii=False, indent=2)
 
 # 앱 타이틀 설정
 st.title(L["title"])
@@ -786,15 +805,22 @@ with tab3:
             st.info(L["no_cal"])
         else:
             sorted_events = sorted(st.session_state["calendar_events"], key=lambda x: (x["date"], x["time"]))
-            for idx, ev in enumerate(sorted_events):
-               ev_date = ev["date"]
-               with st.expander(f"📌 [{ev_date.strftime('%m/%d')}] {ev['time'].strftime('%H:%M')} - {ev['title']}", expanded=True):
-                    st.write(f"**{L['cal_memo_lbl']}** {ev['memo']}")
-                    if st.button(L["btn_del"], key=f"del_cal_{idx}"):
-                        st.session_state["calendar_events"].remove(ev)
-                        save_data(st.session_state["data"])
-                        st.toast(L["toast_cal_del"], icon="🗑️")
-                        st.rerun()
+
+        for idx, ev in enumerate(sorted_events):
+            ev_date = ev["date"]
+        
+            with st.expander(
+                f"📌 [{ev_date.strftime('%m/%d')}] "
+                f"{ev['time'].strftime('%H:%M')} - {ev['title']}",
+                expanded=True
+            ):
+                st.write(f"**{L['cal_memo_lbl']}** {ev['memo']}")
+        
+                if st.button(L["btn_del"], key=f"del_cal_{idx}"):
+                    st.session_state["calendar_events"].remove(ev)
+                    save_data(st.session_state["data"])
+                    st.toast(L["toast_cal_del"], icon="🗑️")
+                    st.rerun()
 
 # =========================================================
 # [4단계] 학교 인터넷 & Wi-Fi 사용 안내
