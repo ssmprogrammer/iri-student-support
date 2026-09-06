@@ -518,40 +518,106 @@ selected_lang = st.sidebar.selectbox(
 st.session_state["lang"] = selected_lang
 L = LANG_PACK[st.session_state["lang"]]
 
-DATA_FILE = "app_data.json"
+# app_data.json을 main.py와 같은 폴더에서 사용
+DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_data.json")
+
+DEFAULT_DATA = {
+    "club_notices": {},
+    "calendar_events": []
+}
 
 def load_data():
-    if os.path.exists(DATA_FILE):
+    """JSON 데이터를 안전하게 읽고 날짜/시간을 Python 객체로 변환한다."""
+    if not os.path.exists(DATA_FILE):
+        return {
+            "club_notices": {},
+            "calendar_events": []
+        }
+
+    try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+    except (json.JSONDecodeError, OSError, ValueError, TypeError):
+        # 파일이 비어 있거나 JSON 형식이 깨진 경우 앱이 중단되지 않도록 초기화
+        return {
+            "club_notices": {},
+            "calendar_events": []
+        }
 
-        for ev in data.get("calendar_events", []):
-            ev["date"] = datetime.date.fromisoformat(ev["date"])
-            ev["time"] = datetime.time.fromisoformat(ev["time"])
+    # 예상 구조가 아니면 기본값으로 보정
+    if not isinstance(data, dict):
+        data = {
+            "club_notices": {},
+            "calendar_events": []
+        }
 
-        return data
+    if not isinstance(data.get("club_notices"), dict):
+        data["club_notices"] = {}
 
-    return {
-        "club_notices": {},
+    if not isinstance(data.get("calendar_events"), list):
+        data["calendar_events"] = []
+
+    # 캘린더 날짜/시간 문자열을 Python date/time으로 변환
+    valid_events = []
+    for ev in data["calendar_events"]:
+        if not isinstance(ev, dict):
+            continue
+
+        try:
+            if isinstance(ev.get("date"), str):
+                ev["date"] = datetime.date.fromisoformat(ev["date"])
+            if isinstance(ev.get("time"), str):
+                ev["time"] = datetime.time.fromisoformat(ev["time"])
+
+            if isinstance(ev.get("date"), datetime.date) and isinstance(ev.get("time"), datetime.time):
+                ev.setdefault("title", "")
+                ev.setdefault("memo", "")
+                valid_events.append(ev)
+        except (ValueError, TypeError):
+            continue
+
+    data["calendar_events"] = valid_events
+    return data
+
+def save_data(data):
+    """Python date/time 객체를 JSON 문자열로 변환해 안전하게 저장한다."""
+    save_data_copy = {
+        "club_notices": data.get("club_notices", {}),
         "calendar_events": []
     }
 
-def save_data(data):
-    save_data_copy = {
-        "club_notices": data["club_notices"],
-        "calendar_events": [
-            {
-                "date": ev["date"].isoformat(),
-                "time": ev["time"].strftime("%H:%M"),
-                "title": ev["title"],
-                "memo": ev["memo"]
-            }
-            for ev in data["calendar_events"]
-        ]
-    }
+    for ev in data.get("calendar_events", []):
+        try:
+            event_date = ev["date"]
+            event_time = ev["time"]
 
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+            if isinstance(event_date, datetime.date):
+                date_str = event_date.isoformat()
+            else:
+                date_str = str(event_date)
+
+            if isinstance(event_time, datetime.time):
+                time_str = event_time.strftime("%H:%M")
+            else:
+                time_str = str(event_time)
+
+            save_data_copy["calendar_events"].append({
+                "date": date_str,
+                "time": time_str,
+                "title": str(ev.get("title", "")),
+                "memo": str(ev.get("memo", ""))
+            })
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    # 임시 파일에 먼저 기록한 뒤 교체해서, 저장 중 파일이 빈/불완전해지는 것을 방지
+    temp_file = DATA_FILE + ".tmp"
+    with open(temp_file, "w", encoding="utf-8") as f:
         json.dump(save_data_copy, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+
+    os.replace(temp_file, DATA_FILE)
 
 # 앱 타이틀 설정
 st.title(L["title"])
@@ -801,26 +867,31 @@ with tab3:
 
     with col_cal2:
         st.subheader(L["cal_list_header"])
+
         if not st.session_state["calendar_events"]:
             st.info(L["no_cal"])
         else:
-            sorted_events = sorted(st.session_state["calendar_events"], key=lambda x: (x["date"], x["time"]))
+            sorted_events = sorted(
+                st.session_state["calendar_events"],
+                key=lambda x: (x["date"], x["time"])
+            )
 
-        for idx, ev in enumerate(sorted_events):
-            ev_date = ev["date"]
-        
-            with st.expander(
-                f"📌 [{ev_date.strftime('%m/%d')}] "
-                f"{ev['time'].strftime('%H:%M')} - {ev['title']}",
-                expanded=True
-            ):
-                st.write(f"**{L['cal_memo_lbl']}** {ev['memo']}")
-        
-                if st.button(L["btn_del"], key=f"del_cal_{idx}"):
-                    st.session_state["calendar_events"].remove(ev)
-                    save_data(st.session_state["data"])
-                    st.toast(L["toast_cal_del"], icon="🗑️")
-                    st.rerun()
+            for idx, ev in enumerate(sorted_events):
+                ev_date = ev["date"]
+                ev_time = ev["time"]
+
+                with st.expander(
+                    f"📌 [{ev_date.strftime('%m/%d')}] "
+                    f"{ev_time.strftime('%H:%M')} - {ev['title']}",
+                    expanded=True
+                ):
+                    st.write(f"**{L['cal_memo_lbl']}** {ev['memo']}")
+
+                    if st.button(L["btn_del"], key=f"del_cal_{idx}"):
+                        st.session_state["calendar_events"].remove(ev)
+                        save_data(st.session_state["data"])
+                        st.toast(L["toast_cal_del"], icon="🗑️")
+                        st.rerun()
 
 # =========================================================
 # [4단계] 학교 인터넷 & Wi-Fi 사용 안내
