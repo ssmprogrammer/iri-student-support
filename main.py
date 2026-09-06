@@ -5,6 +5,7 @@ import datetime
 from PIL import Image
 import matplotlib.pyplot as plt
 import json
+from zoneinfo import ZoneInfo
 
 # 페이지 기본 설정
 st.set_page_config(page_title="이리고등학교 학생 지원 앱", page_icon="🏫", layout="wide")
@@ -827,9 +828,12 @@ with tab3:
     st.header(L["tab3_header"])
     st.info(L["tab3_info"])
 
-    now = datetime.datetime.now()
+    KST = ZoneInfo("Asia/Seoul")
+
+    now = datetime.datetime.now(KST)
     current_date = now.date()
     current_time_str = now.strftime("%H:%M")
+
     
     st.write(f"{L['cur_time']} `{now.strftime('%Y-%m-%d %H:%M:%S')}`")
 
