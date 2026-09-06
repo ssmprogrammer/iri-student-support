@@ -4,6 +4,7 @@ import os
 import datetime
 from PIL import Image
 import matplotlib.pyplot as plt
+import json
 
 # 페이지 기본 설정
 st.set_page_config(page_title="이리고등학교 학생 지원 앱", page_icon="🏫", layout="wide")
@@ -517,6 +518,22 @@ selected_lang = st.sidebar.selectbox(
 st.session_state["lang"] = selected_lang
 L = LANG_PACK[st.session_state["lang"]]
 
+DATA_FILE = "app_data.json"
+
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    return {
+        "club_notices": {},
+        "calendar_events": []
+    }
+
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 # 앱 타이틀 설정
 st.title(L["title"])
 st.caption(L["caption"])
@@ -524,14 +541,11 @@ st.caption(L["caption"])
 # =========================================================
 # [세션 상태 관리] 동아리 게시글 & 캘린더 일정 저장소
 # =========================================================
-if "club_notices" not in st.session_state:
-    st.session_state["club_notices"] = {}
+if "data" not in st.session_state:
+    st.session_state["data"] = load_data()
 
-if "calendar_events" not in st.session_state:
-    st.session_state["calendar_events"] = [
-        {"date": datetime.date(2026, 9, 1), "time": datetime.time(9, 0), "title": "2학기 개학식", "memo": "강당 모임"},
-        {"date": datetime.date(2026, 10, 15), "time": datetime.time(10, 30), "title": "1차 지필평가", "memo": "전과목 시험"}
-    ]
+st.session_state["club_notices"] = st.session_state["data"]["club_notices"]
+st.session_state["calendar_events"] = st.session_state["data"]["calendar_events"]
 
 # 6개 탭 구성
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(L["tabs"])
@@ -688,6 +702,7 @@ with tab2:
             if submit_btn:
                 if new_title and new_content:
                     st.session_state["club_notices"][selected_club].append({"title": new_title, "content": new_content})
+                    save_data(st.session_state["data"])
                     st.toast(L["toast_reg"], icon="✅")
                     st.rerun()
                 else:
@@ -710,11 +725,13 @@ with tab2:
                         edit_content = st.text_area(L["edit_content"], value=item['content'], key=f"edit_c_{selected_club}_{idx}")
                         if st.button(L["btn_save"], key=f"edit_btn_{selected_club}_{idx}"):
                             st.session_state["club_notices"][selected_club][idx] = {"title": edit_title, "content": edit_content}
+                            save_data(st.session_state["data"])
                             st.toast(L["toast_edit"], icon="✏️")
                             st.rerun()
 
                     if st.button(L["btn_del"], key=f"del_btn_{selected_club}_{idx}"):
                         st.session_state["club_notices"][selected_club].pop(idx)
+                        save_data(st.session_state["data"])
                         st.toast(L["toast_del"], icon="🗑️")
                         st.rerun()
 
@@ -756,6 +773,8 @@ with tab3:
                         "title": event_title,
                         "memo": event_memo
                     })
+
+                    save_data(st.session_state["data"])
                     st.toast(L["toast_cal_reg"], icon="📅")
                     st.rerun()
                 else:
@@ -767,11 +786,13 @@ with tab3:
             st.info(L["no_cal"])
         else:
             sorted_events = sorted(st.session_state["calendar_events"], key=lambda x: (x["date"], x["time"]))
-            for idx, ev in enumerate(sorted_events):
-                with st.expander(f"📌 [{ev['date'].strftime('%m/%d')}] {ev['time'].strftime('%H:%M')} - {ev['title']}", expanded=True):
+           for idx, ev in enumerate(sorted_events):
+               ev_date = ev["date"]
+               with st.expander(f"📌 [{ev_date.strftime('%m/%d')}] {ev['time'].strftime('%H:%M')} - {ev['title']}", expanded=True):
                     st.write(f"**{L['cal_memo_lbl']}** {ev['memo']}")
                     if st.button(L["btn_del"], key=f"del_cal_{idx}"):
                         st.session_state["calendar_events"].remove(ev)
+                        save_data(st.session_state["data"])
                         st.toast(L["toast_cal_del"], icon="🗑️")
                         st.rerun()
 
