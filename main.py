@@ -786,7 +786,7 @@ with tab3:
             st.info(L["no_cal"])
         else:
             sorted_events = sorted(st.session_state["calendar_events"], key=lambda x: (x["date"], x["time"]))
-           for idx, ev in enumerate(sorted_events):
+            for idx, ev in enumerate(sorted_events):
                ev_date = ev["date"]
                with st.expander(f"📌 [{ev_date.strftime('%m/%d')}] {ev['time'].strftime('%H:%M')} - {ev['title']}", expanded=True):
                     st.write(f"**{L['cal_memo_lbl']}** {ev['memo']}")
